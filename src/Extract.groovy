@@ -1,9 +1,9 @@
-import org.apache.commons.math3.random.EmpiricalDistribution
-
 // https://mvnrepository.com/artifact/org.apache.commons/commons-math3
 @Grapes(
 @Grab(group='org.apache.commons', module='commons-math3', version='3.6.1')
 )
+
+import org.apache.commons.math3.random.EmpiricalDistribution
 
 /*
 In case of OpenJ9 it is better to use options like that
@@ -15,6 +15,7 @@ class Query {
     String text = "";
     String args = "";
     String full = "";
+    String type = "";
 }
 
 Double getTime(String line){
@@ -50,8 +51,19 @@ Query createAQuery(def lines){
             String tempLine = line.toUpperCase();
             int index = tempLine.indexOf("SELECT");
 
+            if(index>0) {
+                if (tempLine.indexOf("COUNT") > 0) {
+                    query.type = "count"
+                } else {
+                    query.type = "select"
+                }
+            }
+
             if(index<0) {
                 index = tempLine.indexOf("WITH");
+                if(index>0){
+                    query.type = "with"
+                }
             }
 
             if(index>0){
@@ -91,7 +103,6 @@ void prepareFullQueary(Query query){
         group.each{ it->
             args[it[1]] = it[2];
             keys<<it[1];
-//            query.full = query.full.replaceAll("\\${it[1]}", it[2]);
         }
     }
 
@@ -104,23 +115,78 @@ void prepareFullQueary(Query query){
 void saveAQuery(Query query){
 
     prepareFullQueary(query);
-
-    File file = new File("result"+File.separatorChar+query.id+"_"+query.time+".src")
-    file<<query.text;
-    file<<"\n";
-    file<<query.args;
+//
+//    File file = new File("result"+File.separatorChar+query.id+"_"+query.time+".src")
+//    file<<query.text;
+//    file<<"\n";
+//    file<<query.args;
 
     File file2 = new File("result"+File.separatorChar+query.id+"_"+query.time+".sql")
     file2<<query.full;
 }
 
-int parseLogGetTimeStat(String filename){
+int parseLogGetQueries(String filename, String type){
+    String tempLine = "";
+
+    int queries = 0;
+
+    def lines = [];
+
     def times = [];
 
-    new File(filename).eachLine { line ->
-        Double time = getTime(line);
-        if(time!=null){
-            times+=time;
+    long readLines = 0;
+    long readBytes = 0;
+
+    new BufferedInputStream(new FileInputStream(filename), 132*1024*1024).eachLine {line->
+        readLines++;
+        readBytes+=line.length();
+
+        if(isItEventStart(line)) {
+            if(!isItAQueryStart(line) && isItAQueryStart(tempLine)){
+                // окончание запроса
+                tempLine = "";
+
+                Query query = createAQuery(lines);
+                query.id=queries;
+
+                saveAQuery(query);
+                queries++;
+
+                if(type!=null){
+                    if(type.equalsIgnoreCase(query.type)){
+                        times << query.time;
+                    }
+                } else {
+                    times << query.time;
+                }
+            }
+            else if (isItAQueryStart(line) && isItAQueryStart(tempLine)) {
+                // окончание запроса
+                tempLine = "";
+
+                Query query = createAQuery(lines);
+                query.id=queries;
+
+                saveAQuery(query);
+                queries++;
+
+                if(type!=null){
+                    if(type.equalsIgnoreCase(query.type)){
+                        times << query.time;
+                    }
+                } else {
+                    times << query.time;
+                }
+            }
+            if(isItAQueryStart(line) && !isItAQueryStart(tempLine)){
+                lines = [];
+                // начало запроса
+                tempLine = line;
+            }
+        }
+        lines+=line;
+        if(readLines%1000==0){
+            println "Read "+readLines+" lines "+readBytes+" bytes";
         }
     }
 
@@ -132,65 +198,14 @@ int parseLogGetTimeStat(String filename){
             println "[$it.min..$it.max]: $it.n"
         }
     }
+
+    println "Size: "+times.size();
+    println "Sum: "+distribution.sampleStats.sum
     return times.size();
 }
 
-int parseLogGetQueries(String filename){
-    String tempLine = "";
+println "Analyzing ${args[0]}..."
 
-    int queries = 0;
-
-    def lines = [];
-    new File(filename).eachLine {line->
-
-        if(isItEventStart(line)) {
-            if(!isItAQueryStart(line) && isItAQueryStart(tempLine)){
-                // окончание запроса
-                tempLine = "";
-
-                Query query = createAQuery(lines);
-                query.id=queries;
-                saveAQuery(query);
-
-                queries++;
-            }
-            else if (isItAQueryStart(line) && isItAQueryStart(tempLine)) {
-                // окончание запроса
-                tempLine = "";
-
-                Query query = createAQuery(lines);
-                query.id=queries;
-                saveAQuery(query);
-
-                queries++;
-            }
-            if(isItAQueryStart(line) && !isItAQueryStart(tempLine)){
-                lines = [];
-                // начало запроса
-                tempLine = line;
-            }
-        }
-        lines+=line;
-    }
-
-    return queries;
-}
-
-println 'Starting...'
-
-int queries = parseLogGetQueries(args[0]);
-//int queries = parseLogGetTimeStat(args[0]);
-//int queries = 0;
-//
-//String test = '''$1 = 'secondLine', $2 = 'ThirdLine' ''';
-//
-//def group = test =~ /(\$\d+) = (\'.+?\')/
-//if(group.hasGroup() && group.size()>0){
-//
-//    group.each{ it->
-//        println "${it[1]} = ${it[2]}"
-//    }
-//
-//}
+int queries = parseLogGetQueries(args[0], "count");
 
 println "Found $queries queries";
