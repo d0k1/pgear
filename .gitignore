@@ -1,0 +1,9 @@
+# Created by .ignore support plugin (hsz.mobi)
+.idea/
+cds/
+logs/
+out/
+pg-log-parser.iml
+result/
+/result.csv
+result.csv

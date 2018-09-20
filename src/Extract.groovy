@@ -27,7 +27,9 @@ Double getTime(String line){
 
     return null;
 }
-
+boolean ignoreLine(String line){
+    return line.contains('] ОШИБКА:  ');
+}
 boolean isItEventStart(String line) {
     return line.contains('СООБЩЕНИЕ:  ');
 }
@@ -89,6 +91,10 @@ Query createAQuery(def lines){
         }
     }
 
+    if(query.text.length()==0){
+        println("Unknown query '${lines}'")
+    }
+
     return query;
 }
 
@@ -113,6 +119,9 @@ void prepareFullQueary(Query query){
 }
 
 void saveAQuery(Query query){
+    if(query.text.length()==0){
+        return;
+    }
 
     prepareFullQueary(query);
 //
@@ -184,7 +193,9 @@ int parseLogGetQueries(String filename, String type){
                 tempLine = line;
             }
         }
-        lines+=line;
+        if(!ignoreLine(line)) {
+            lines += line;
+        }
         if(readLines%1000==0){
             println "Read "+readLines+" lines "+readBytes+" bytes";
         }
