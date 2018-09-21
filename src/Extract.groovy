@@ -146,7 +146,9 @@ int parseLogGetQueries(String filename, String type){
     long readLines = 0;
     long readBytes = 0;
 
-    new BufferedInputStream(new FileInputStream(filename), 132*1024*1024).eachLine {line->
+//    FileReader reader = new FileReader( new BufferedInputStream(new FileInputStream(filename), 132*1024*1024));
+    FileReader reader = new FileReader(filename);
+    while ( (line = reader.readLine()) != null) {
         readLines++;
         readBytes+=line.length();
 
@@ -200,6 +202,9 @@ int parseLogGetQueries(String filename, String type){
             println "Read "+readLines+" lines "+readBytes+" bytes";
         }
     }
+//
+//    new BufferedInputStream(new FileInputStream(filename), 132*1024*1024).eachLine {line->
+//    }
 
     EmpiricalDistribution distribution = new EmpiricalDistribution();
     distribution.load(times as double[])
