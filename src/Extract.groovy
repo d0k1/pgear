@@ -10,6 +10,13 @@
 
 import org.apache.commons.math3.random.EmpiricalDistribution
 
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+import groovy.transform.Field
+
+@Field Map ARGS_PATTERNS = [:];
+
+
 /*
 In case of OpenJ9 it is better to use options like that
 -server -Xmx10512m -Xms250m -Djava.net.preferIPv4Stack=true -Duser.language=ru -Duser.region=RU -Xverify:none -Xshareclasses:name=myCache,cacheDir="./cds",verbose -Xscmx500M -Xaggressive -Xcodecachetotal128m -Xscmaxaot128M -Xcodecache8m -Dcom.ibm.enableClassCaching=true -Xloggc:logs/gc.log -XX:+PrintGCDetails
@@ -32,6 +39,7 @@ Double getTime(String line){
 
     return null;
 }
+
 boolean ignoreLine(String line){
     return line.contains('] ОШИБКА:  ');
 }
@@ -117,9 +125,14 @@ void prepareFullQueary(Query query){
         }
     }
 
-    keys.each { arg->
-        query.full = query.full.replaceAll(/(?:\s|=|\()(\${arg})(?:\s|=|\)|\,)/, args[arg]);
-    }
+        keys.each { arg ->
+            try {
+                query.full = queryArgReplace(query.full+" ", arg, args[arg].replace('$', '\\$'))
+            }catch(Exception e){
+                println(e.toString())
+                throw e;
+            }
+        }
 }
 
 void saveAQuery(Query query){
@@ -133,9 +146,9 @@ void saveAQuery(Query query){
 //    file<<query.text;
 //    file<<"\n";
 //    file<<query.args;
-
-    File file2 = new File("result"+File.separatorChar+query.id+"_"+query.time+".sql")
-    file2<<query.full;
+    FileWriter writer = new FileWriter("result"+File.separatorChar+query.id+"_"+query.time+".sql");
+    writer.write(query.full+"\n")
+    writer.close()
 }
 
 int parseLogGetQueries(String filename, String type){
@@ -150,8 +163,8 @@ int parseLogGetQueries(String filename, String type){
     long readLines = 0;
     long readBytes = 0;
 
-//    FileReader reader = new FileReader( new BufferedInputStream(new FileInputStream(filename), 132*1024*1024));
-    FileReader reader = new FileReader(filename);
+    FileReader freader = new FileReader(filename);
+    BufferedReader reader = new BufferedReader(freader, 256*1024*1024)
     while ( (line = reader.readLine()) != null) {
         readLines++;
         readBytes+=line.length();
@@ -203,12 +216,9 @@ int parseLogGetQueries(String filename, String type){
             lines += line;
         }
         if(readLines%1000==0){
-            println "Read "+readLines+" lines "+readBytes+" bytes";
+            println "Read "+readLines+" lines "+readBytes+" bytes. Queries: ${queries}";
         }
     }
-//
-//    new BufferedInputStream(new FileInputStream(filename), 132*1024*1024).eachLine {line->
-//    }
 
     EmpiricalDistribution distribution = new EmpiricalDistribution();
     distribution.load(times as double[])
@@ -226,6 +236,40 @@ int parseLogGetQueries(String filename, String type){
 
 println "Analyzing ${args[0]}..."
 
-int queries = parseLogGetQueries(args[0], "count");
+for(int i=1;i<10001;i++) {
+    String pattern = '(?:\\s|=|\\()(\\$'+i+')(?:\\s|=|\\)|\\,)';
+    Pattern r = Pattern.compile(pattern);
+    ARGS_PATTERNS.put('$'+i, r);
+}
 
+String queryArgReplace(String text, String key, String value) {
+    Pattern r = ARGS_PATTERNS[key];
+    if(r==null){
+        System.err.println("ERROR: no pattern found for ${key}. compiling");
+        r = Pattern.compile(/(?:\s|=|\()(\${key})(?:\s|=|\)|\,)/);
+    }
+    Matcher m = r.matcher(text);
+    StringBuffer sb = new StringBuffer();
+    while (m.find()) {
+        String arg0 = m.group(0);
+        String arg1 = arg0.replaceFirst(Pattern.quote(m.group(1)), (value));
+        arg1 = arg1.replace('$', '\\$')
+        m.appendReplacement(sb, arg1);
+    }
+    m.appendTail(sb); // append the rest of the contents
+    return sb.toString();
+}
+
+int queries = parseLogGetQueries(args[0], "count");
 println "Found $queries queries";
+
+//
+//String arg='$1'
+//String a = /(?:\s|=|\()(\${arg})(?:\s|=|\)|\,)/
+//String query = 'where a = $1 ';
+//query = query.replaceAll(a, 'serviceCall$1$1');
+//
+//println query;
+//def v = 'employee$473784836'
+//System.out.println(queryArgReplace('where a = ($1) ', '$1', v.replace('$', '\\$')));
+
