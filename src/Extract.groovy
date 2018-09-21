@@ -1,3 +1,4 @@
+@GrabConfig(systemClassLoader=true, initContextClassLoader=true)
 // https://mvnrepository.com/artifact/org.apache.commons/commons-math3
 @Grapes(
 @Grab(group='org.apache.commons', module='commons-math3', version='3.6.1')
@@ -112,9 +113,8 @@ void prepareFullQueary(Query query){
         }
     }
 
-    keys.sort {-it.size()};
     keys.each { arg->
-        query.full = query.full.replace(arg, args[arg]);
+        query.full = query.full.replaceAll(/(?:\s|=|\()(\${arg})(?:\s|=|\)|\,)/, args[arg]);
     }
 }
 

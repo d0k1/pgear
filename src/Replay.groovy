@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
+@GrabConfig(systemClassLoader=true, initContextClassLoader=true)
 @Grapes(value = [
         @Grab(group = 'org.postgresql', module = 'postgresql', version = '42.2.2'),
         @Grab(group = 'com.zaxxer', module = 'HikariCP', version = '3.2.0')])
