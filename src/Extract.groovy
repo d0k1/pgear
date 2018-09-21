@@ -1,5 +1,9 @@
 @GrabConfig(systemClassLoader=true, initContextClassLoader=true)
 // https://mvnrepository.com/artifact/org.apache.commons/commons-math3
+/**
+ * grape -V resolve group module version
+ * ~/.groovy/grape
+ */
 @Grapes(
 @Grab(group='org.apache.commons', module='commons-math3', version='3.6.1')
 )
