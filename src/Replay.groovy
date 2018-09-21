@@ -24,7 +24,6 @@ class UnitOfLoad implements Callable {
     String file;
     String originalId;
     String originalTime;
-    def exceptions;
 
     @Override
     String call() {
@@ -36,14 +35,13 @@ class UnitOfLoad implements Callable {
         try {
             result = stmt.execute(query);
         } catch(Exception e){
-            exceptions<<e;
             exception = e;
         }
         String error = exception==null?"false":exception.toString();
 
         stmt.close();
         connection.close();
-        return "${id}; ${file}; ${System.currentTimeMillis() - start}; ${originalId}; ${originalTime}; ${result}; ${error} ";
+        return "${id}; ${file}; ${originalId}; ${originalTime}; ${System.currentTimeMillis() - start}; ${result}; ${error} ";
     }
 }
 
@@ -51,11 +49,11 @@ String url = args[0];
 String login = args[1];
 String password = args[2];
 String queriesDir = args[3];
-int threads = 16;
+int threads = 12;
 
 ExecutorService pool = Executors.newFixedThreadPool(threads);
 
-println('loading '+url);
+println("${new Date()} loading ${url}");
 
 HikariConfig config = new HikariConfig();
 config.setJdbcUrl( url );
@@ -66,8 +64,6 @@ config.setMaximumPoolSize(threads);
 HikariDataSource ds = new HikariDataSource( config );
 
 def queries = [:]
-
-def exceptions = []
 
 def futures = []
 
@@ -107,7 +103,6 @@ queries.each { entry->
     unit.originalTime = timeFromFile;
     unit.originalId = idFromFile;
     unit.query = entry.getValue();
-    unit.exceptions = exceptions;
     unit.id = position;
 
     futures << pool.submit(unit);
@@ -140,5 +135,5 @@ while(futures.size()>0){
     futures = newFutures;
 }
 
-println("Done. Time: ${System.currentTimeMillis() - time}")
+println("${new Date()} Done Time: ${System.currentTimeMillis() - time}")
 
