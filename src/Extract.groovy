@@ -16,6 +16,7 @@ import groovy.transform.Field
 
 @Field Map ARGS_PATTERNS = [:];
 
+@Field BufferedOutputStream outputStream;
 
 /*
 In case of OpenJ9 it is better to use options like that
@@ -23,7 +24,7 @@ In case of OpenJ9 it is better to use options like that
  */
 class Query {
     int id;
-    double time;
+    double time= Double.NaN;
     String text = "";
     String args = "";
     String full = "";
@@ -37,18 +38,28 @@ Double getTime(String line){
         return Double.valueOf(time);
     }
 
-    return null;
+    return Double.NaN;
 }
 
 boolean ignoreLine(String line){
-    return line.contains('] ОШИБКА:  ');
+    return line.contains('] ОШИБКА:  ')||
+           line.contains('] ОШИБКА:  повторяющееся')||
+           line.contains('] ОПЕРАТОР:') ||
+           line.contains('] ПОДРОБНОСТИ:  Процесс ') ||
+           line.contains('] КОНТЕКСТ:  ') ||
+           line.contains('] ПОДСКАЗКА:  ') ||
+           (line.contains('] ПОДРОБНОСТИ:  Ключ ') && line.contains(' уже существует.')) ||
+
+           (line.contains('\tПроцесс ') && line.contains(' ожидает в режиме ShareLock блокировку ')) ||
+           (line.contains('\tПроцесс ') && line.contains(': '));
+
 }
 boolean isItEventStart(String line) {
     return line.contains('СООБЩЕНИЕ:  ');
 }
 
 boolean isItAQueryStart(String line){
-    return line.contains('СООБЩЕНИЕ:  продолжительность:');// && line.contains('выполнение');
+    return line.contains('СООБЩЕНИЕ:  продолжительность:') || line.contains('СООБЩЕНИЕ:  выполнение');
 }
 
 Query createAQuery(def lines){
@@ -61,23 +72,28 @@ Query createAQuery(def lines){
             query.time = time;
         }
 
-        if(line.contains("СООБЩЕНИЕ:  продолжительность:")){
+        if(isItAQueryStart(line)){
             body = true;
             String tempLine = line.toUpperCase();
-            int index = tempLine.indexOf("SELECT");
 
-            if(index>0) {
-                if (tempLine.indexOf("COUNT") > 0) {
-                    query.type = "count"
-                } else {
-                    query.type = "select"
-                }
-            }
+            int index = -1;
 
             if(index<0) {
                 index = tempLine.indexOf("WITH");
                 if(index>0){
                     query.type = "with"
+                }
+            }
+
+            if(index<0) {
+                index = tempLine.indexOf("SELECT");
+
+                if (index > 0) {
+                    if (tempLine.indexOf("COUNT") > 0) {
+                        query.type = "count"
+                    } else {
+                        query.type = "select"
+                    }
                 }
             }
 
@@ -105,7 +121,7 @@ Query createAQuery(def lines){
     }
 
     if(query.text.length()==0){
-        println("Unknown query '${lines}'")
+        //println("Unknown query '${lines}'")
     }
 
     return query;
@@ -125,43 +141,50 @@ void prepareFullQueary(Query query){
         }
     }
 
-        keys.each { arg ->
-            try {
-                query.full = queryArgReplace(query.full+" ", arg, args[arg].replace('$', '\\$'))
-            }catch(Exception e){
-                println(e.toString())
-                throw e;
-            }
+    keys.each { arg ->
+        try {
+            query.full = queryArgReplace(query.full+" ", arg, args[arg].replace('$', '\\$'))
+        }catch(Exception e){
+            println(e.toString())
+            throw e;
         }
+    }
 }
 
-void saveAQuery(Query query){
+int saveAQuery(Query query){
+
+    if(outputStream==null){
+        return 0;
+    }
+
     if(query.text.length()==0){
-        return;
+        return 0;
     }
 
     prepareFullQueary(query);
-//
-//    File file = new File("result"+File.separatorChar+query.id+"_"+query.time+".src")
-//    file<<query.text;
-//    file<<"\n";
-//    file<<query.args;
-    FileWriter writer = new FileWriter("result"+File.separatorChar+query.id+"_"+query.time+".sql");
-    writer.write(query.full+"\n")
-    writer.close()
+
+    outputStream.write(query.full.getBytes());
+    outputStream.write("\n".getBytes());
+    outputStream.write("(\$\$)".getBytes());
+    outputStream.write("\n".getBytes());
+    outputStream.flush();
+
+    return 1;
 }
 
 int parseLogGetQueries(String filename, String type){
-    String tempLine = "";
 
-    int queries = 0;
+    long savedQueries = 0;
+
+    int foundProbableQueries = 0;
 
     def lines = [];
 
-    def times = [];
+    def queriesOfTypeDurations = [];
 
     long readLines = 0;
     long readBytes = 0;
+    String prevStateLine = "";
 
     FileReader freader = new FileReader(filename);
     BufferedReader reader = new BufferedReader(freader, 256*1024*1024)
@@ -169,59 +192,84 @@ int parseLogGetQueries(String filename, String type){
         readLines++;
         readBytes+=line.length();
 
-        if(isItEventStart(line)) {
-            if(!isItAQueryStart(line) && isItAQueryStart(tempLine)){
+        if(isItEventStart(line) /*СОБЫТИЕ*/ ) {
+            // текущая строка не выполнение, а предыдущая выполнение - окончание запроса
+            if(!isItAQueryStart(line) && isItAQueryStart(prevStateLine)){
                 // окончание запроса
-                tempLine = "";
+                prevStateLine = "";
 
                 Query query = createAQuery(lines);
-                query.id=queries;
+                query.id=foundProbableQueries;
 
-                saveAQuery(query);
-                queries++;
+                savedQueries+=saveAQuery(query);
+                foundProbableQueries++;
 
                 if(type!=null){
                     if(type.equalsIgnoreCase(query.type)){
-                        times << query.time;
+                        queriesOfTypeDurations << query.time;
                     }
                 } else {
-                    times << query.time;
+                    queriesOfTypeDurations << query.time;
                 }
             }
-            else if (isItAQueryStart(line) && isItAQueryStart(tempLine)) {
+            // текущая строка выполнение и предыдущая выполнение - окнчание запроса
+            else if (isItAQueryStart(line) && isItAQueryStart(prevStateLine)) {
                 // окончание запроса
-                tempLine = "";
+                prevStateLine = "";
 
                 Query query = createAQuery(lines);
-                query.id=queries;
+                query.id=foundProbableQueries;
 
-                saveAQuery(query);
-                queries++;
+                savedQueries+=saveAQuery(query);
+                foundProbableQueries++;
 
                 if(type!=null){
                     if(type.equalsIgnoreCase(query.type)){
-                        times << query.time;
+                        queriesOfTypeDurations << query.time;
                     }
                 } else {
-                    times << query.time;
+                    queriesOfTypeDurations << query.time;
                 }
             }
-            if(isItAQueryStart(line) && !isItAQueryStart(tempLine)){
+            //если текущая строка выполнение а предыдущая нет - начало запроса
+            if(isItAQueryStart(line) && !isItAQueryStart(prevStateLine)){
                 lines = [];
                 // начало запроса
-                tempLine = line;
+                prevStateLine = line;
             }
         }
         if(!ignoreLine(line)) {
             lines += line;
         }
         if(readLines%1000==0){
-            println "Read "+readLines+" lines "+readBytes+" bytes. Queries: ${queries}";
+            println "Read "+readLines+" lines "+readBytes+" bytes. Queries: ${foundProbableQueries}";
+        }
+    }
+    if(lines.size()>0){
+        // окончание запроса
+        Query query = createAQuery(lines);
+        query.id=foundProbableQueries;
+
+        savedQueries+=saveAQuery(query);
+        if(type!=null){
+            if(type.equalsIgnoreCase(query.type)){
+                queriesOfTypeDurations << query.time;
+            }
+        } else {
+            queriesOfTypeDurations << query.time;
         }
     }
 
-    EmpiricalDistribution distribution = new EmpiricalDistribution();
-    distribution.load(times as double[])
+    long totalQueries = queriesOfTypeDurations.size();
+    def withTimes = [];
+    queriesOfTypeDurations.each {it->
+        if(it!=Double.NaN){
+            withTimes << it;
+        }
+    }
+
+    EmpiricalDistribution distribution = new EmpiricalDistribution(100);
+    distribution.load(withTimes as double[])
     def stat = distribution.getBinStats();
     stat.each{ it->
         if(!it.min.isNaN() && !it.max.isNaN()) {
@@ -229,15 +277,18 @@ int parseLogGetQueries(String filename, String type){
         }
     }
 
-    println "Size: "+times.size();
-    println "Sum: "+distribution.sampleStats.sum
-    return times.size();
+    println "Queries total: "+totalQueries;
+    println "Queries with time: "+withTimes.size();
+    println "Sum: "+distribution.sampleStats.sum.toLong();
+
+    println "Queries saved: "+savedQueries;
+    return queriesOfTypeDurations.size();
 }
 
 println "Analyzing ${args[0]}..."
 
 for(int i=1;i<10001;i++) {
-    String pattern = '(?:\\s|=|\\()(\\$'+i+')(?:\\s|=|\\)|\\,)';
+    String pattern = '(?:\\s|=|\\(|>|<)(\\$'+i+')(?:\\s|=|\\)|\\,)';
     Pattern r = Pattern.compile(pattern);
     ARGS_PATTERNS.put('$'+i, r);
 }
@@ -260,6 +311,14 @@ String queryArgReplace(String text, String key, String value) {
     return sb.toString();
 }
 
+if(args.size()>=2) {
+    new File(args[1]).delete();
+    outputStream = new BufferedOutputStream(new FileOutputStream(new File(args[1])))
+}
+else {
+    outputStream = null;
+}
+
 int queries = parseLogGetQueries(args[0], "count");
 println "Found $queries queries";
 
@@ -270,6 +329,19 @@ println "Found $queries queries";
 //query = query.replaceAll(a, 'serviceCall$1$1');
 //
 //println query;
-//def v = 'employee$473784836'
-//System.out.println(queryArgReplace('where a = ($1) ', '$1', v.replace('$', '\\$')));
+//def v = '%%'
+//System.out.println(queryArgReplace(' lower($1) ', '$1', v.replace('$', '\\$')));
 
+//def group = "2018-09-17 15:09:01.802 MSK [12471] ПОДРОБНОСТИ:  параметры: \$1 = '%%'" =~ /(\$\d+) = (\'.+?\')/
+//
+//def args = [:]
+//def keys = [];
+//if(group.hasGroup() && group.size()>0){
+//
+//    group.each{ it->
+//        args[it[1]] = it[2];
+//        keys<<it[1];
+//    }
+//}
+//
+//println args

@@ -49,7 +49,7 @@ class UnitOfLoad implements Callable {
 String url = args[0];
 String login = args[1];
 String password = args[2];
-String queriesDir = args[3];
+String queriesFilename = args[3];
 int threads = 12;
 
 ExecutorService pool = Executors.newFixedThreadPool(threads);
@@ -64,46 +64,51 @@ config.setMinimumIdle(threads);
 config.setMaximumPoolSize(threads);
 HikariDataSource ds = new HikariDataSource( config );
 
-def queries = [:]
+def queries = []
 
 def futures = []
 
-def dir = new File(queriesDir)
+FileReader freader = new FileReader(queriesFilename);
+BufferedReader reader = new BufferedReader(freader, 256*1024*1024)
 
-def files = [];
+StringBuffer queryBuffer = new StringBuffer();
+String line = null;
 
-def results = [];
-
-dir.eachFileRecurse (FileType.FILES) { file ->
-    files << file.getAbsolutePath();
+while ( (line = reader.readLine()) != null) {
+    if(line.equals("(\$\$)")){
+        String query = queryBuffer.toString()
+        queryBuffer = new StringBuffer();
+        if(query.trim().length()>0){
+            queries << query;
+        }
+    } else {
+        queryBuffer.append("\n"+line);
+    }
 }
 
-files.sort();
-
-files.each {file->
-    File f = new File(file);
-    queries.put(f.getName(),  f.text);
+String query = queryBuffer.toString()
+if(query.trim().length()>0){
+    queries << query;
 }
 
+println "Found ${queries.size()} queries"
+
+/*
 int position = 0;
 
 long time = System.currentTimeMillis();
 
-queries.each { entry->
+queries.each { query->
     UnitOfLoad unit = new UnitOfLoad();
     unit.ds = ds;
     unit.file = entry.getKey();
     String timeFromFile="0.0";
     String idFromFile = "-1";
 
-    def group = unit.file =~ /(\d+)_(.+)?.sql/
-    if(group.hasGroup()&&group.size()>0){
-        timeFromFile = group[0][2];
-        idFromFile = group[0][1];
-    }
     unit.originalTime = timeFromFile;
     unit.originalId = idFromFile;
-    unit.query = entry.getValue();
+
+    unit.query = query;
     unit.id = position;
 
     futures << pool.submit(unit);
@@ -122,7 +127,7 @@ while(futures.size()>0){
                 def result = it.get(1, TimeUnit.NANOSECONDS);
 
                 results << results;
-                String outline = "${result}; ${results.size()}; ${files.size()}";
+                String outline = "${result}; ${results.size()}; ${queries.size()}";
 
                 output << outline+"\n";
                 println(outline);
@@ -138,3 +143,4 @@ while(futures.size()>0){
 
 println("${new Date()} Done Time: ${System.currentTimeMillis() - time}")
 
+*/
