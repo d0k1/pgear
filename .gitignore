@@ -7,3 +7,5 @@ pg-log-parser.iml
 result/
 /result.csv
 result.csv
+/histo.csv
+histo.csv
