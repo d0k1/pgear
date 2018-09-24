@@ -126,7 +126,7 @@ while(futures.size()>0){
             try {
                 def result = it.get(1, TimeUnit.NANOSECONDS);
                 position++;
-                String outline = "${result}; ${position}; ${queries.size()}";
+                String outline = "${new Date()}; ${result}; ${position}; ${queries.size()}";
 
                 output << outline+"\n";
                 println(outline);
