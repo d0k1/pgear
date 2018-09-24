@@ -15,6 +15,7 @@ import java.util.regex.Pattern
 import groovy.transform.Field
 
 @Field Map ARGS_PATTERNS = [:];
+@Field Map ARGS_QUOTED_PATTERNS = [:];
 
 @Field BufferedOutputStream outputStream;
 
@@ -67,9 +68,12 @@ Query createAQuery(def lines){
     boolean body = false;
 
     lines.each{String line->
-        Double time = getTime(line);
-        if(time!=null){
-            query.time = time;
+
+        if(query.time==Double.NaN){
+            Double time = getTime(line);
+            if(time!=Double.NaN) {
+                query.time = time;
+            }
         }
 
         if(isItAQueryStart(line)){
@@ -158,6 +162,12 @@ int saveAQuery(Query query){
     }
 
     if(query.text.length()==0){
+
+        // avoid calculation with unsupported queries like create table / drop table / vacuum
+        if(query.time!=Double.NaN){
+            query.time = Double.NaN;
+        }
+
         return 0;
     }
 
@@ -268,7 +278,7 @@ int parseLogGetQueries(String filename, String type){
         }
     }
 
-    EmpiricalDistribution distribution = new EmpiricalDistribution(100);
+    EmpiricalDistribution distribution = new EmpiricalDistribution();
     distribution.load(withTimes as double[])
     def stat = distribution.getBinStats();
     stat.each{ it->
@@ -290,7 +300,9 @@ println "Analyzing ${args[0]}..."
 for(int i=1;i<10001;i++) {
     String pattern = '(?:\\s|=|\\(|>|<)(\\$'+i+')(?:\\s|=|\\)|\\,)';
     Pattern r = Pattern.compile(pattern);
-    ARGS_PATTERNS.put('$'+i, r);
+    String text = '$'+i;
+    ARGS_PATTERNS.put(text, r);
+    ARGS_QUOTED_PATTERNS.put(text, Pattern.compile(Pattern.quote(text)));
 }
 
 String queryArgReplace(String text, String key, String value) {
@@ -299,11 +311,21 @@ String queryArgReplace(String text, String key, String value) {
         System.err.println("ERROR: no pattern found for ${key}. compiling");
         r = Pattern.compile(/(?:\s|=|\()(\${key})(?:\s|=|\)|\,)/);
     }
+    Pattern quotedR = ARGS_QUOTED_PATTERNS[key];
+    if(quotedR==null){
+        System.err.println("ERROR: no quoted pattern found for ${key}. compiling");
+        quotedR = Pattern.compile(Pattern.quote(key));
+    }
+
     Matcher m = r.matcher(text);
     StringBuffer sb = new StringBuffer();
     while (m.find()) {
         String arg0 = m.group(0);
-        String arg1 = arg0.replaceFirst(Pattern.quote(m.group(1)), (value));
+
+        //String arg1 = arg0.replaceFirst(Pattern.quote(m.group(1)), (value));
+        String arg1 = quotedR.matcher(arg0).replaceFirst(value);
+
+
         arg1 = arg1.replace('$', '\\$')
         m.appendReplacement(sb, arg1);
     }
@@ -319,8 +341,13 @@ else {
     outputStream = null;
 }
 
-int queries = parseLogGetQueries(args[0], "count");
+long start = System.currentTimeMillis()
+println "${new Date()} Extracting queries from ${args[0]}"
+
+int queries = parseLogGetQueries(args[0], null);
 println "Found $queries queries";
+
+println "${new Date()} Done extracting for ${System.currentTimeMillis() - start} ms"
 
 //
 //String arg='$1'

@@ -50,7 +50,7 @@ String url = args[0];
 String login = args[1];
 String password = args[2];
 String queriesFilename = args[3];
-int threads = 12;
+int threads = 20;
 
 ExecutorService pool = Executors.newFixedThreadPool(threads);
 
@@ -93,22 +93,21 @@ if(query.trim().length()>0){
 
 println "Found ${queries.size()} queries"
 
-/*
 int position = 0;
 
 long time = System.currentTimeMillis();
 
-queries.each { query->
+queries.each { item ->
     UnitOfLoad unit = new UnitOfLoad();
     unit.ds = ds;
-    unit.file = entry.getKey();
+    unit.file = queriesFilename;
     String timeFromFile="0.0";
     String idFromFile = "-1";
 
     unit.originalTime = timeFromFile;
     unit.originalId = idFromFile;
 
-    unit.query = query;
+    unit.query = item;
     unit.id = position;
 
     futures << pool.submit(unit);
@@ -119,15 +118,15 @@ File output = new File("result.csv");
 output.delete();
 output = new File("result.csv");
 
+position = 0;
 while(futures.size()>0){
     def newFutures = [];
     futures.each { Future it->
         if(it.isDone()){
             try {
                 def result = it.get(1, TimeUnit.NANOSECONDS);
-
-                results << results;
-                String outline = "${result}; ${results.size()}; ${queries.size()}";
+                position++;
+                String outline = "${result}; ${position}; ${queries.size()}";
 
                 output << outline+"\n";
                 println(outline);
@@ -143,4 +142,3 @@ while(futures.size()>0){
 
 println("${new Date()} Done Time: ${System.currentTimeMillis() - time}")
 
-*/
