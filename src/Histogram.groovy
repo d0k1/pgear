@@ -22,13 +22,17 @@ BufferedReader reader = new BufferedReader(freader, 256*1024*1024)
 String line = null;
 
 def times = [];
+int errors = 0;
 
 while ( (line = reader.readLine()) != null) {
     def items = line.split("\\;");
-    double time = Double.parseDouble(items[5])
-
-    descriptiveStatistics.addValue(time);
-    times << time;
+    try {
+        double time = Double.parseDouble(items[5])
+        descriptiveStatistics.addValue(time);
+        times << time;
+    } catch (Exception e){
+        errors++;
+    }
 }
 
 File output = new File("histo.csv");
@@ -45,28 +49,32 @@ stat.each{ it->
         output << "$it.min..$it.max;$it.n"+"\n";
     }
 }
-output<<"\nmin;50%;95%;99%;99.9%;max;stddev;n\n"
+output<<"\nmin;50%;95%;99%;99.9%;max;stddev;n;sum;errors\n";
 
-output << descriptiveStatistics.min <<";"
-output << descriptiveStatistics.getPercentile(50.0) <<";"
-output << descriptiveStatistics.getPercentile(95.0) <<";"
-output << descriptiveStatistics.getPercentile(99.0) <<";"
-output << descriptiveStatistics.getPercentile(99.9) <<";"
-output << descriptiveStatistics.max <<";"
-output << descriptiveStatistics.standardDeviation <<";"
-output << descriptiveStatistics.n <<";"
+output << descriptiveStatistics.min <<";";
+output << descriptiveStatistics.getPercentile(50.0) <<";";
+output << descriptiveStatistics.getPercentile(95.0) <<";";
+output << descriptiveStatistics.getPercentile(99.0) <<";";
+output << descriptiveStatistics.getPercentile(99.9) <<";";
+output << descriptiveStatistics.max <<";";
+output << descriptiveStatistics.standardDeviation <<";";
+output << descriptiveStatistics.n <<";";
+output << descriptiveStatistics.sum.toLong() << ";";
+output << errors;
 
 println "Queries total: "+times.size();
 println "Sum: "+distribution.sampleStats.sum.toLong();
-print "\nmin;50%;95%;99%;99.9%;max;stddev;n\n";
-print  descriptiveStatistics.min+";"
-print  descriptiveStatistics.getPercentile(50.0) +";"
-print  descriptiveStatistics.getPercentile(95.0) +";"
-print  descriptiveStatistics.getPercentile(99.0) +";"
-print  descriptiveStatistics.getPercentile(99.9) +";"
-print  descriptiveStatistics.max+";"
-print  descriptiveStatistics.standardDeviation +";"
-print  descriptiveStatistics.n+";"
+print "\nmin;50%;95%;99%;99.9%;max;stddev;n;sum;errors\n";
+print  descriptiveStatistics.min+";";
+print  descriptiveStatistics.getPercentile(50.0) +";";
+print  descriptiveStatistics.getPercentile(95.0) +";";
+print  descriptiveStatistics.getPercentile(99.0) +";";
+print  descriptiveStatistics.getPercentile(99.9) +";";
+print  descriptiveStatistics.max+";";
+print  descriptiveStatistics.standardDeviation +";";
+print  descriptiveStatistics.n+";";
+print  descriptiveStatistics.sum.toLong()+";";
+print  errors;
 println ""
 
 
