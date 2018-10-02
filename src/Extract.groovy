@@ -16,7 +16,6 @@ import groovy.transform.Field
 
 @Field Map ARGS_PATTERNS = [:];
 @Field Map ARGS_QUOTED_PATTERNS = [:];
-
 @Field BufferedOutputStream outputStream;
 
 /*
@@ -297,8 +296,15 @@ int parseLogGetQueries(String filename, String type){
 
 println "Analyzing ${args[0]}..."
 
+String getArgPatternForArg(String i){
+    if(i.indexOf('$')>=0) {
+        i = i.substring(i.indexOf('$')+1)
+    }
+    return '(?:\\s|=|\\(|>|<|\\,)(\\$'+i+')(?:\\s|=|\\)|\\,)';
+}
+
 for(int i=1;i<10001;i++) {
-    String pattern = '(?:\\s|=|\\(|>|<)(\\$'+i+')(?:\\s|=|\\)|\\,)';
+    String pattern = getArgPatternForArg(''+i);
     Pattern r = Pattern.compile(pattern);
     String text = '$'+i;
     ARGS_PATTERNS.put(text, r);
@@ -309,7 +315,8 @@ String queryArgReplace(String text, String key, String value) {
     Pattern r = ARGS_PATTERNS[key];
     if(r==null){
         System.err.println("ERROR: no pattern found for ${key}. compiling");
-        r = Pattern.compile(/(?:\s|=|\()(\${key})(?:\s|=|\)|\,)/);
+        String pattern = getArgPatternForArg(key);
+        r = Pattern.compile(pattern);
     }
     Pattern quotedR = ARGS_QUOTED_PATTERNS[key];
     if(quotedR==null){
@@ -350,14 +357,14 @@ println "Found $queries queries";
 println "${new Date()} Done extracting for ${System.currentTimeMillis() - start} ms"
 
 //
-//String arg='$1'
+////String arg='$1'
 //String a = /(?:\s|=|\()(\${arg})(?:\s|=|\)|\,)/
 //String query = 'where a = $1 ';
 //query = query.replaceAll(a, 'serviceCall$1$1');
 //
 //println query;
 //def v = '%%'
-//System.out.println(queryArgReplace(' lower($1) ', '$1', v.replace('$', '\\$')));
+//System.out.println(queryArgReplace(' lower($1,$2,$3) ', '$2', v.replace('$', '\\$')));
 
 //def group = "2018-09-17 15:09:01.802 MSK [12471] ПОДРОБНОСТИ:  параметры: \$1 = '%%'" =~ /(\$\d+) = (\'.+?\')/
 //
