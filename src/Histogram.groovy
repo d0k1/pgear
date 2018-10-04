@@ -49,10 +49,13 @@ stat.each{ it->
         output << "$it.min..$it.max;$it.n"+"\n";
     }
 }
-output<<"\nmin;50%;95%;99%;99.9%;max;stddev;n;sum;errors\n";
+output<<"\nmin;50%;60%;70%;80%;95%;99%;99.9%;max;stddev;n;sum;errors\n";
 
 output << descriptiveStatistics.min <<";";
 output << descriptiveStatistics.getPercentile(50.0) <<";";
+output << descriptiveStatistics.getPercentile(60.0) <<";";
+output << descriptiveStatistics.getPercentile(70.0) <<";";
+output << descriptiveStatistics.getPercentile(80.0) <<";";
 output << descriptiveStatistics.getPercentile(95.0) <<";";
 output << descriptiveStatistics.getPercentile(99.0) <<";";
 output << descriptiveStatistics.getPercentile(99.9) <<";";
@@ -64,9 +67,12 @@ output << errors;
 
 println "Queries total: "+times.size();
 println "Sum: "+distribution.sampleStats.sum.toLong();
-print "\nmin;50%;95%;99%;99.9%;max;stddev;n;sum;errors\n";
+print "\nmin;50%;60%;70%;80%;95%;99%;99.9%;max;stddev;n;sum;errors\n";
 print  descriptiveStatistics.min+";";
 print  descriptiveStatistics.getPercentile(50.0) +";";
+print  descriptiveStatistics.getPercentile(60.0) +";";
+print  descriptiveStatistics.getPercentile(70.0) +";";
+print  descriptiveStatistics.getPercentile(80.0) +";";
 print  descriptiveStatistics.getPercentile(95.0) +";";
 print  descriptiveStatistics.getPercentile(99.0) +";";
 print  descriptiveStatistics.getPercentile(99.9) +";";
