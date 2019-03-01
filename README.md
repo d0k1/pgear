@@ -1,6 +1,7 @@
 # PG Extract And Replay
 
 _A poor man's PostgreSQL load generator_
+
 _plain and simple_
 
 ## Prerequisites
